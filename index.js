@@ -47,6 +47,7 @@ async function run() {
     await client.connect();
     
     const usersCollection = client.db('summer-camp').collection('users')
+    const classesCollection = client.db('summer-camp').collection('classes')
 
     // users apis
     app.get('/users',async (req, res) => {
@@ -120,6 +121,13 @@ async function run() {
 console.log(token)
     res.send({ token })
   })
+
+
+  app.post('/classes', async (req, res) => {
+    const user = req.body;
+    const result = await classesCollection.insertOne(user);
+    res.send(result);
+  });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
