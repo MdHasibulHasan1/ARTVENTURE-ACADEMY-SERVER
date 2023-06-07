@@ -48,16 +48,15 @@ async function run() {
     
     const usersCollection = client.db('summer-camp').collection('users')
 
-
-  
-     // users apis
-     app.get('/users', async (req, res) => {
+    // users apis
+    app.get('/users',async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
+
+    
     app.post('/users', async (req, res) => {
       const user = req.body;
-      console.log(req.body);
       const query = { email: user.email }
       const existingUser = await usersCollection.findOne(query);
 
@@ -69,6 +68,28 @@ async function run() {
       res.send(result);
     });
 
+   // Update a user's role as an instructor
+   app.patch('/users/instructor/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const result = await usersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { role: 'instructor' } }
+      );
+
+      if (result.modifiedCount === 1) {
+        res.json({ success: true, message: 'User role updated to instructor' });
+      } else {
+        res.status(404).json({ success: false, message: 'User not found' });
+      }
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  });
+
+  
 
    // jwt
    app.post('/jwt', (req, res) => {
