@@ -142,13 +142,32 @@ console.log(token)
   });
 
 
+  // Route to update class status to "approved"
+app.put('/classes/approve/:id', async(req, res) => {
+  try {
+  const id = req.params.id;
+  const result = await classesCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { status: 'approved' } }
+  );
+  if (result.modifiedCount === 1) {
+    res.json({ success: true, message: 'Class status updated to approve' });
+  } else {
+    res.status(404).json({ success: false, message: 'class not found' });
+  }
+} catch (error) {
+  console.error(error);
+  res.status(500).json({ success: false, message: 'Internal server error' });
+}
+});
+
 // Route to update class status to "denied"
 app.put('/classes/deny/:id', async(req, res) => {
   try {
     const id = req.params.id;
     const result = await classesCollection.updateOne(
       { _id: new ObjectId(id) },
-      { $set: { status: 'pending' } }
+      { $set: { status: 'denied' } }
     );
     if (result.modifiedCount === 1) {
       res.json({ success: true, message: 'Class status updated to pending' });
