@@ -89,7 +89,28 @@ async function run() {
     }
   });
 
-  
+  // Update a user's role as an admin
+  app.patch('/users/admin/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const result = await usersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { role: 'admin' } }
+      );
+
+      if (result.modifiedCount === 1) {
+        res.json({ success: true, message: 'User role updated to admin' });
+      } else {
+        res.status(404).json({ success: false, message: 'User not found' });
+      }
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  });
+
+
 
    // jwt
    app.post('/jwt', (req, res) => {
