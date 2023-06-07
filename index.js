@@ -49,12 +49,21 @@ async function run() {
     const usersCollection = client.db('summer-camp').collection('users')
     const classesCollection = client.db('summer-camp').collection('classes')
 
+
+
+    
+ 
+    app.get('/instructors',async (req, res) => {
+      const result = await usersCollection.find({ role: "instructor" }).toArray();
+      res.send(result);
+    });
+
     // users apis
+    
     app.get('/users',async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
-
     
     app.post('/users', async (req, res) => {
       const user = req.body;
@@ -122,13 +131,35 @@ console.log(token)
     res.send({ token })
   })
 
-
+  app.get('/classes', async (req, res) => {
+    const result = await classesCollection.find().toArray();
+    res.send(result);
+  });
   app.post('/classes', async (req, res) => {
     const user = req.body;
     const result = await classesCollection.insertOne(user);
     res.send(result);
   });
 
+
+// Route to update class status to "denied"
+app.put('/classes/deny/:id', async(req, res) => {
+  try {
+    const id = req.params.id;
+    const result = await classesCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status: 'pending' } }
+    );
+    if (result.modifiedCount === 1) {
+      res.json({ success: true, message: 'Class status updated to pending' });
+    } else {
+      res.status(404).json({ success: false, message: 'class not found' });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
