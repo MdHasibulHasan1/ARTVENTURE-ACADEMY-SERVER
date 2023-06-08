@@ -49,6 +49,8 @@ async function run() {
     const usersCollection = client.db('summer-camp').collection('users')
     const classesCollection = client.db('summer-camp').collection('classes')
 
+    const selectedClassesCollection = client.db('summer-camp').collection('SelectedClasses')
+
 
 
     
@@ -125,12 +127,119 @@ async function run() {
    // jwt
    app.post('/jwt', (req, res) => {
     const user = req.body;
-    console.log(user);
+  
     const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
 console.log(token)
     res.send({ token })
   })
 
+
+
+  app.get('/mySelectedClasses/:email', async (req, res) => {
+    const { email } = req.params;
+   
+    const result = await selectedClassesCollection.find({ email: email }).toArray();
+    res.send(result);
+  });
+  
+  app.delete('/mySelectedClasses/:id', async (req, res) => {
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) };
+    const result = await selectedClassesCollection.deleteOne(query);
+    res.send(result);
+  })
+  app.post('/selectedClasses', async (req, res) => {
+    const selectedClass = req.body;
+    const result = await selectedClassesCollection.insertOne(selectedClass);
+    res.send(result);
+  });
+  app.get('/selectedClasses', async (req, res) => {
+    
+    const result = await selectedClassesCollection.find({ }).toArray();
+    res.send(result);
+  });
+  
+  
+  
+  app.get("/popularClasses", async (req, res) => {
+      try {
+        const popularClasses = await classesCollection.find().sort({ totalEnrolled: -1 }).limit(6).toArray();
+        res.json(popularClasses);
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+  })
+
+
+  // --------------------------------------
+  // Assuming you have the necessary imports and setup for your server
+
+// GET top 6 instructors based on number of students
+app.get('/topInstructors', async (req, res) => {
+  try {
+    const instructors = await classesCollection
+      .aggregate([
+        { $group: { _id: '$totalEnrolled', totalEnrolled: { $sum: '$totalEnrolled' } } },
+        { $sort: { totalEnrolled: -1 } },
+        { $limit: 6 }
+      ])
+      .toArray();
+
+    res.json(instructors);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+// ----------
+  // Update classes total enrolled
+  app.patch('/popularClasses/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = await classesCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { totalEnrolled: parseFloat(req.body.totalEnrolled)+1 } }
+      );
+      if (result.modifiedCount === 1) {
+        res.json({ success: true, message: 'User role updated to instructor' });
+      } else {
+        res.status(404).json({ success: false, message: 'User not found' });
+      }
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  });  
+ 
+
+
+
+// Update a class by ID
+
+app.put("/myClasses/update/:id", async (req, res) => {
+  const id = req.params.id;
+  const body = req.body;
+  console.log(body);
+  const filter = { _id: new ObjectId(id) };
+  const updateDoc = {
+    $set: {
+      price: body.price,
+      imgURL: body.imgURL,
+      className: body.className
+    },
+  };
+  const result = await classesCollection.updateOne(filter, updateDoc);
+  res.send(result);
+}); 
+
+  app.get('/myClasses/:email', async (req, res) => {
+    const { email } = req.params;
+
+    
+    const result = await classesCollection.find({ instructorEmail: email }).toArray();
+    res.send(result);
+  });
   app.get('/classes', async (req, res) => {
     const result = await classesCollection.find().toArray();
     res.send(result);
@@ -140,6 +249,28 @@ console.log(token)
     const result = await classesCollection.insertOne(user);
     res.send(result);
   });
+
+
+  app.get('/approvedClasses',async (req, res) => {
+    const result = await classesCollection.find({ status: "approved" }).toArray();
+    res.send(result);
+  });
+app.patch("/classes/:id", async (req, res) => {
+ 
+    const id = req.params.id;
+    const feedback = req.body.feedback;
+
+const filter = { _id: new ObjectId(id) };
+const updateDoc = {
+  $set: {
+    feedback
+  },
+};
+
+const result = await classesCollection.updateOne(filter, updateDoc);
+res.send(result);
+ 
+});
 
 
   // Route to update class status to "approved"
@@ -156,7 +287,7 @@ app.put('/classes/approve/:id', async(req, res) => {
     res.status(404).json({ success: false, message: 'class not found' });
   }
 } catch (error) {
-  console.error(error);
+
   res.status(500).json({ success: false, message: 'Internal server error' });
 }
 });
@@ -175,7 +306,7 @@ app.put('/classes/deny/:id', async(req, res) => {
       res.status(404).json({ success: false, message: 'class not found' });
     }
   } catch (error) {
-    console.error(error);
+
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
