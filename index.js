@@ -50,7 +50,7 @@ async function run() {
     const usersCollection = client.db('summer-camp').collection('users')
     const classesCollection = client.db('summer-camp').collection('classes')
     const selectedClassesCollection = client.db('summer-camp').collection('SelectedClasses')
-const paymentCollection=client.db('summer-camp').collection('payments')
+    const paymentCollection=client.db('summer-camp').collection('payments')
     app.get('/instructors',async (req, res) => {
       const result = await usersCollection.find({ role: "instructor" }).toArray();
       res.send(result);
@@ -342,23 +342,80 @@ app.put('/classes/deny/:id', async(req, res) => {
     clientSecret: paymentIntent.client_secret,
   })
 })
-
-
 app.post('/payments', verifyJWT, async (req, res) => {
-  const { paymentInfo,selectedId } = req.body;
+  const { paymentInfo, selectedId, classId } = req.body;
+
   const insertResult = await paymentCollection.insertOne(paymentInfo);
-console.log(paymentInfo)
-  const query = { _id:   new ObjectId(selectedId) } 
-      const deleteResult = await selectedClassesCollection.deleteOne(query)
-    console.log(query);
-      
-      res.send({ insertResult, deleteResult });
+  console.log(paymentInfo);
+
+  const deleteQuery = { _id: new ObjectId(selectedId) };
+ 
+
+  const deleteResult = await selectedClassesCollection.deleteOne(deleteQuery);
+  console.log(deleteQuery);
+
+  const classObjectId = new ObjectId(classId);
+  const classDocument = await classesCollection.findOne({ _id: classObjectId });
+  
+  classDocument.availableSeats = parseInt(classDocument.availableSeats);
+  await classesCollection.replaceOne({ _id: classObjectId }, classDocument);
+  
+  const updateResult = await classesCollection.updateOne(
+    { _id: classObjectId },
+    { $inc: { availableSeats: -1 } }
+  );
+
+  res.send({ insertResult, deleteResult, updateResult });
+});
 
  
-})
+app.get('/myEnrolledClasses/:email',verifyJWT, async (req, res) => {
+  const { email } = req.params;
+  if (req.decoded.email !== email) {
+    res.send({ role: false });
+    return; // Return early if unauthorized
+  }
 
-   
+  try {
+    const result = await paymentCollection
+    .find({ email: email })
+    .sort({ date: -1 }) // Sort by date in descending order
+    .toArray();
+    const enrolledClasses = await Promise.all(
+      result.map(async (payment) => {
+        const classId = payment.classId;
+        const classInfo = await classesCollection.findOne({ _id: new ObjectId(classId) });
+        return { payment, classInfo };
+      })
+    );
 
+    res.send(enrolledClasses);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ error: 'Internal Server Error' });
+  }
+});
+
+/* 
+app.patch('/update/classes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await usersCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { role: 'instructor' } }
+    );
+
+    if (result.modifiedCount === 1) {
+      res.json({ success: true, message: 'User role updated to instructor' });
+    } else {
+      res.status(404).json({ success: false, message: 'User not found' });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+}); */
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
