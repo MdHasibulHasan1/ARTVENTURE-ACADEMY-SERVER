@@ -6,6 +6,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb')
 require('dotenv').config();
 const app = express()
 
+const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
 const port = process.env.PORT || 5000;
 
 // middleware
@@ -48,13 +49,8 @@ async function run() {
     
     const usersCollection = client.db('summer-camp').collection('users')
     const classesCollection = client.db('summer-camp').collection('classes')
-
     const selectedClassesCollection = client.db('summer-camp').collection('SelectedClasses')
-
-
-
-    
- 
+const paymentCollection=client.db('summer-camp').collection('payments')
     app.get('/instructors',async (req, res) => {
       const result = await usersCollection.find({ role: "instructor" }).toArray();
       res.send(result);
@@ -80,6 +76,36 @@ async function run() {
       res.send(result);
     });
 
+    // ----------verify admin, instructor------------------------
+    app.get('/users/admin/:email', verifyJWT, async (req, res) => {
+      const email = req.params.email;
+  // console.log("email",email, req.decoded.email)
+     if (req.decoded.email !== email) {
+        res.send({ role: false })
+      } 
+
+      const query = { email: email }
+      const user = await usersCollection.findOne(query);
+      // console.log("/a//",user);
+      const result = { role: user?.role ==="admin" }
+      // console.log(result)
+      res.send(result);
+    })
+    app.get('/users/instructor/:email', verifyJWT, async (req, res) => {
+      const email = req.params.email;
+// console.log("remail",email, req.decoded.email)
+      if (req.decoded.email !== email) {
+        res.send({ role: false })
+      }
+
+      const query = { email: email }
+      const user = await usersCollection.findOne(query);
+      // console.log("check instructor",user)
+      const result = { role: user?.role === "instructor" }
+      res.send(result);
+    })
+
+    // -------------------
    // Update a user's role as an instructor
    app.patch('/users/instructor/:id', async (req, res) => {
     try {
@@ -127,17 +153,18 @@ async function run() {
    // jwt
    app.post('/jwt', (req, res) => {
     const user = req.body;
-  
-    const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
-console.log(token)
+    const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "1h" })
+// console.log(token)
     res.send({ token })
   })
 
 
 
-  app.get('/mySelectedClasses/:email', async (req, res) => {
+  app.get('/mySelectedClasses/:email', verifyJWT,async (req,res) => {
     const { email } = req.params;
-   
+    if (req.decoded.email !== email) {
+      res.send({ role: false })
+    }
     const result = await selectedClassesCollection.find({ email: email }).toArray();
     res.send(result);
   });
@@ -172,25 +199,10 @@ console.log(token)
   })
 
 
-  // --------------------------------------
-  // Assuming you have the necessary imports and setup for your server
-
+  
 // GET top 6 instructors based on number of students
 app.get('/topInstructors', async (req, res) => {
-  try {
-    const instructors = await classesCollection
-      .aggregate([
-        { $group: { _id: '$totalEnrolled', totalEnrolled: { $sum: '$totalEnrolled' } } },
-        { $sort: { totalEnrolled: -1 } },
-        { $limit: 6 }
-      ])
-      .toArray();
-
-    res.json(instructors);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
+  
 });
 // ----------
   // Update classes total enrolled
@@ -202,9 +214,9 @@ app.get('/topInstructors', async (req, res) => {
         { $set: { totalEnrolled: parseFloat(req.body.totalEnrolled)+1 } }
       );
       if (result.modifiedCount === 1) {
-        res.json({ success: true, message: 'User role updated to instructor' });
+        res.json({ success: true, message: 'updated successfully' });
       } else {
-        res.status(404).json({ success: false, message: 'User not found' });
+        res.status(404).json({ success: false, message: 'not found' });
       }
     } catch (error) {
       console.error(error);
@@ -220,7 +232,7 @@ app.get('/topInstructors', async (req, res) => {
 app.put("/myClasses/update/:id", async (req, res) => {
   const id = req.params.id;
   const body = req.body;
-  console.log(body);
+  // console.log(body);
   const filter = { _id: new ObjectId(id) };
   const updateDoc = {
     $set: {
@@ -233,10 +245,13 @@ app.put("/myClasses/update/:id", async (req, res) => {
   res.send(result);
 }); 
 
-  app.get('/myClasses/:email', async (req, res) => {
+  app.get('/myClasses/:email',  verifyJWT, async (req,  res) => {
     const { email } = req.params;
-
-    
+// console.log("fff",req.decoded)
+   const decodedEmail = req.decoded?.email;
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: 'forbidden access' })
+      } 
     const result = await classesCollection.find({ instructorEmail: email }).toArray();
     res.send(result);
   });
@@ -310,6 +325,41 @@ app.put('/classes/deny/:id', async(req, res) => {
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
+
+// payment related api
+ // create payment intent
+ app.post('/create-payment-intent', verifyJWT, async (req, res) => {
+  const { price, } = req.body
+  const amount = parseFloat(price) * 100
+//  console.log(price, amount)
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: amount,
+    currency: 'usd',
+    payment_method_types: ['card'],
+  })
+
+  res.send({
+    clientSecret: paymentIntent.client_secret,
+  })
+})
+
+
+app.post('/payments', verifyJWT, async (req, res) => {
+  const { paymentInfo,selectedId } = req.body;
+  const insertResult = await paymentCollection.insertOne(paymentInfo);
+console.log(paymentInfo)
+  const query = { _id:   new ObjectId(selectedId) } 
+      const deleteResult = await selectedClassesCollection.deleteOne(query)
+    console.log(query);
+      
+      res.send({ insertResult, deleteResult });
+
+ 
+})
+
+   
+
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
