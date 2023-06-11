@@ -10,7 +10,12 @@ const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
 const port = process.env.PORT || 5000;
 
 // middleware
-app.use(cors());
+const corsOptions = {
+  origin: '*',
+  credentials: true,
+  optionSuccessStatus: 200,
+}
+app.use(cors(corsOptions))
 app.use(express.json());
 
 
@@ -45,7 +50,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     
     const usersCollection = client.db('summer-camp').collection('users')
     const classesCollection = client.db('summer-camp').collection('classes')
@@ -55,9 +60,48 @@ async function run() {
       const result = await usersCollection.find({ role: "instructor" }).toArray();
       res.send(result);
     });
+  
+// GET top 6 instructors based on number of students
+app.get('/topInstructors', async (req, res) => {
+  const result = await usersCollection.find({ role: "instructor" })
+    .sort({ email: 1 })
+    .limit(6)
+    .toArray();
+  res.send(result);
+});
 
     // users apis
+    app.get("/profile/update/:email", async (req, res) => {
+      const { email } = req.params;
+      try {
+        // Find the user profile data in the collection
+        const userProfile = await usersCollection.findOne({ email });
+        if (!userProfile) {
+          return res.status(404).json({ message: "User profile not found" });
+        }
+        res.json(userProfile);
+      } catch (error) {
+        console.error("Error retrieving user profile:", error);
+        res.status(500).json({ message: "An error occurred while retrieving user profile" });
+      }
+    });
     
+    // Route for updating user profile
+app.post("/profile/update/:email",async (req, res) => {
+  const { email } = req.params;
+   console.log(email);
+  const { name, photoURL, phoneNumber, address, gender } = req.body;
+  try {
+    const result=await usersCollection.updateOne(
+      { email },
+      { $set: { name, photoURL, phoneNumber, address, gender } }
+    );
+    res.send(result)
+  } catch (error) {
+    console.error("Error updating user profile:", error);
+    res.status(500).json({ message: "An error occurred while updating user profile" });
+  }
+});
     app.get('/users',async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
@@ -67,11 +111,9 @@ async function run() {
       const user = req.body;
       const query = { email: user.email }
       const existingUser = await usersCollection.findOne(query);
-
       if (existingUser) {
         return res.send({ message: 'user already exists' })
       }
-
       const result = await usersCollection.insertOne(user);
       res.send(result);
     });
@@ -86,36 +128,30 @@ async function run() {
 
       const query = { email: email }
       const user = await usersCollection.findOne(query);
-      // console.log("/a//",user);
       const result = { role: user?.role ==="admin" }
-      // console.log(result)
       res.send(result);
     })
     app.get('/users/instructor/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
-// console.log("remail",email, req.decoded.email)
+
       if (req.decoded.email !== email) {
         res.send({ role: false })
       }
 
       const query = { email: email }
       const user = await usersCollection.findOne(query);
-      // console.log("check instructor",user)
       const result = { role: user?.role === "instructor" }
       res.send(result);
     })
 
-    // -------------------
    // Update a user's role as an instructor
    app.patch('/users/instructor/:id', async (req, res) => {
     try {
       const { id } = req.params;
-
       const result = await usersCollection.updateOne(
         { _id: new ObjectId(id) },
         { $set: { role: 'instructor' } }
       );
-
       if (result.modifiedCount === 1) {
         res.json({ success: true, message: 'User role updated to instructor' });
       } else {
@@ -186,8 +222,6 @@ async function run() {
     res.send(result);
   });
   
-  
-  
   app.get("/popularClasses", async (req, res) => {
       try {
         const popularClasses = await classesCollection.find().sort({ totalEnrolled: -1 }).limit(6).toArray();
@@ -198,13 +232,6 @@ async function run() {
       }
   })
 
-
-  
-// GET top 6 instructors based on number of students
-app.get('/topInstructors', async (req, res) => {
-  
-});
-// ----------
   // Update classes total enrolled
   app.patch('/popularClasses/:id', async (req, res) => {
     try {
@@ -344,38 +371,33 @@ app.put('/classes/deny/:id', async(req, res) => {
 })
 app.post('/payments', verifyJWT, async (req, res) => {
   const { paymentInfo, selectedId, classId } = req.body;
-
   const insertResult = await paymentCollection.insertOne(paymentInfo);
   console.log(paymentInfo);
-
   const deleteQuery = { _id: new ObjectId(selectedId) };
- 
-
   const deleteResult = await selectedClassesCollection.deleteOne(deleteQuery);
   console.log(deleteQuery);
-
   const classObjectId = new ObjectId(classId);
   const classDocument = await classesCollection.findOne({ _id: classObjectId });
-  
   classDocument.availableSeats = parseInt(classDocument.availableSeats);
   await classesCollection.replaceOne({ _id: classObjectId }, classDocument);
-  
   const updateResult = await classesCollection.updateOne(
     { _id: classObjectId },
-    { $inc: { availableSeats: -1 } }
+  {
+    $inc: { availableSeats: -1 },
+    $set: { enrolledStudents: +1 }
+  }
   );
-
   res.send({ insertResult, deleteResult, updateResult });
 });
 
  
 app.get('/myEnrolledClasses/:email',verifyJWT, async (req, res) => {
-  const { email } = req.params;
+ const { email } = req.params;
   if (req.decoded.email !== email) {
     res.send({ role: false });
     return; // Return early if unauthorized
   }
-
+ 
   try {
     const result = await paymentCollection
     .find({ email: email })
@@ -396,26 +418,6 @@ app.get('/myEnrolledClasses/:email',verifyJWT, async (req, res) => {
   }
 });
 
-/* 
-app.patch('/update/classes/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const result = await usersCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { role: 'instructor' } }
-    );
-
-    if (result.modifiedCount === 1) {
-      res.json({ success: true, message: 'User role updated to instructor' });
-    } else {
-      res.status(404).json({ success: false, message: 'User not found' });
-    }
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-}); */
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
@@ -433,6 +435,6 @@ app.get('/', (req, res) => {
 })
 
 app.listen(port, () => {
-  console.log(`server is running on port ${port}`)
+  console.log(`summer camp server is running on port ${port}`)
 })
 
