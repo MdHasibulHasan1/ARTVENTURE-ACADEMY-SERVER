@@ -118,18 +118,31 @@ app.post("/profile/update/:email",async (req, res) => {
       res.send(result);
     });
 
-    // ----------verify admin, instructor------------------------
+    // ----------verify admin, instructor, user------------------------
     app.get('/users/admin/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
-  // console.log("email",email, req.decoded.email)
+
      if (req.decoded.email !== email) {
         res.send({ role: false })
       } 
-
       const query = { email: email }
       const user = await usersCollection.findOne(query);
       const result = { role: user?.role ==="admin" }
       res.send(result);
+    })
+    app.get('/users/user/:email', verifyJWT, async (req, res) => {
+      const email = req.params.email;
+     if (req.decoded.email !== email) {
+        res.send({ role: false })
+      } 
+      const query = { email: email }
+      const user = await usersCollection.findOne(query);
+      if(user?.role === 'admin' || user?.role === 'instructor') {
+        res.send({ role: false })
+      }
+     else{
+      res.send({ role: true })
+     }
     })
     app.get('/users/instructor/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
@@ -292,6 +305,19 @@ app.put("/myClasses/update/:id", async (req, res) => {
     res.send(result);
   });
 
+  // ___---------
+  app.get('/approvedClasses/:email', async (req, res) => {
+    try {
+      const email = req.params.email;
+      console.log(email)
+      const result = await classesCollection.find({ instructorEmail: email, status: "approved" }).toArray();
+      res.send(result);
+    } catch (error) {
+      console.error(error);
+      res.status(500).send("Error fetching approved classes");
+    }
+  });
+  // __________________________________
 
   app.get('/approvedClasses',async (req, res) => {
     const result = await classesCollection.find({ status: "approved" }).toArray();
