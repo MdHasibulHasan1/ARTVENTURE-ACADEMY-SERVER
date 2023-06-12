@@ -74,7 +74,6 @@ app.get('/topInstructors', async (req, res) => {
     app.get("/profile/update/:email", async (req, res) => {
       const { email } = req.params;
       try {
-        // Find the user profile data in the collection
         const userProfile = await usersCollection.findOne({ email });
         if (!userProfile) {
           return res.status(404).json({ message: "User profile not found" });
@@ -86,7 +85,6 @@ app.get('/topInstructors', async (req, res) => {
       }
     });
     
-    // Route for updating user profile
 app.post("/profile/update/:email",async (req, res) => {
   const { email } = req.params;
    console.log(email);
@@ -197,17 +195,12 @@ app.post("/profile/update/:email",async (req, res) => {
     }
   });
 
-
-
    // jwt
    app.post('/jwt', (req, res) => {
     const user = req.body;
     const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "1h" })
-// console.log(token)
     res.send({ token })
   })
-
-
 
   app.get('/mySelectedClasses/:email', verifyJWT,async (req,res) => {
     const { email } = req.params;
@@ -265,14 +258,10 @@ app.post("/profile/update/:email",async (req, res) => {
   });  
  
 
-
-
 // Update a class by ID
-
 app.put("/myClasses/update/:id", async (req, res) => {
   const id = req.params.id;
   const body = req.body;
-  // console.log(body);
   const filter = { _id: new ObjectId(id) };
   const updateDoc = {
     $set: {
@@ -287,7 +276,6 @@ app.put("/myClasses/update/:id", async (req, res) => {
 
   app.get('/myClasses/:email',  verifyJWT, async (req,  res) => {
     const { email } = req.params;
-// console.log("fff",req.decoded)
    const decodedEmail = req.decoded?.email;
       if (email !== decodedEmail) {
         return res.status(403).send({ error: true, message: 'forbidden access' })
@@ -305,7 +293,6 @@ app.put("/myClasses/update/:id", async (req, res) => {
     res.send(result);
   });
 
-  // ___---------
   app.get('/approvedClasses/:email', async (req, res) => {
     try {
       const email = req.params.email;
@@ -317,7 +304,6 @@ app.put("/myClasses/update/:id", async (req, res) => {
       res.status(500).send("Error fetching approved classes");
     }
   });
-  // __________________________________
 
   app.get('/approvedClasses',async (req, res) => {
     const result = await classesCollection.find({ status: "approved" }).toArray();
@@ -339,7 +325,6 @@ const result = await classesCollection.updateOne(filter, updateDoc);
 res.send(result);
  
 });
-
 
   // Route to update class status to "approved"
 app.put('/classes/approve/:id', async(req, res) => {
@@ -384,7 +369,6 @@ app.put('/classes/deny/:id', async(req, res) => {
  app.post('/create-payment-intent', verifyJWT, async (req, res) => {
   const { price, } = req.body
   const amount = parseFloat(price) * 100
-//  console.log(price, amount)
   const paymentIntent = await stripe.paymentIntents.create({
     amount: amount,
     currency: 'usd',
@@ -443,7 +427,6 @@ app.get('/myEnrolledClasses/:email',verifyJWT, async (req, res) => {
     res.status(500).send({ error: 'Internal Server Error' });
   }
 });
-
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
